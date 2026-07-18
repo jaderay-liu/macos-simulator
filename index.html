@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>macOS Sequoia</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;overflow:hidden;height:100vh;background:#000;user-select:none}
+/* ── Screens ── */
+.screen{position:fixed;inset:0;display:none;z-index:10}
+.screen.active{display:flex}
+/* ── Boot ── */
+#bootScreen{flex-direction:column;align-items:center;justify-content:center;background:#000;z-index:100}
+.boot-logo{font-size:120px;color:#fff;margin-bottom:40px;opacity:0;animation:fadeIn .5s .3s forwards}
+.boot-bar-wrap{width:240px;height:4px;background:rgba(255,255,255,.15);border-radius:2px;overflow:hidden;opacity:0;animation:fadeIn .5s 1s forwards}
+.boot-bar{height:100%;width:0;background:#fff;border-radius:2px;animation:bootProgress 2s 1.2s forwards;transition:width .3s}
+@keyframes bootProgress{to{width:100%}}
+@keyframes fadeIn{to{opacity:1}}
+/* ── Lock Screen ── */
+#lockScreen{flex-direction:column;align-items:center;justify-content:center;background:url('https://images.unsplash.com/photo-1506748686214-e9df14d4d9d0?w=1920') center/cover;z-index:50}
+.lock-overlay{position:absolute;inset:0;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);background:rgba(0,0,0,.3)}
+.lock-content{position:relative;z-index:1;text-align:center;color:#fff}
+.lock-avatar{width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#667eea,#764ba2);margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:36px;color:#fff;border:2px solid rgba(255,255,255,.3)}
+.lock-name{font-size:22px;font-weight:600;margin-bottom:24px;text-shadow:0 2px 10px rgba(0,0,0,.5)}
+.lock-input{background:rgba(255,255,255,.25);border:1px solid rgba(255,255,255,.3);border-radius:24px;padding:12px 20px;width:240px;font-size:16px;color:#fff;text-align:center;outline:none;backdrop-filter:blur(10px)}
+.lock-input::placeholder{color:rgba(255,255,255,.5)}
+.lock-input:focus{background:rgba(255,255,255,.3);border-color:rgba(255,255,255,.5)}
+.lock-btn{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.3);border-radius:24px;padding:10px 30px;font-size:14px;color:#fff;margin-top:12px;cursor:pointer;backdrop-filter:blur(10px);transition:all .2s}
+.lock-btn:hover{background:rgba(255,255,255,.3)}
+.lock-error{color:#ff6b6b;font-size:13px;margin-top:8px;opacity:0;transition:opacity .3s}
+.lock-error.show{opacity:1}
+.lock-hint{color:rgba(255,255,255,.4);font-size:12px;margin-top:16px}
+.lock-time{font-size:64px;font-weight:200;margin-bottom:8px;text-shadow:0 2px 20px rgba(0,0,0,.5)}
+.lock-date{font-size:18px;font-weight:400;margin-bottom:30px;opacity:.8}
+/* ── Desktop / Wallpaper ── */
+#desktopScreen{flex-direction:column;background:#000;z-index:20}
+.desktop-wallpaper{position:absolute;inset:0;background:url('https://images.unsplash.com/photo-1506748686214-e9df14d4d9d0?w=1920') center/cover;z-index:0}
+.wallpaper-overlay{position:absolute;inset:0;background:rgba(0,0,0,.1)}
+/* ── Menu Bar ── */
+.menubar{position:relative;z-index:200;height:28px;background:rgba(255,255,255,.2);backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);display:flex;align-items:center;padding:0 12px;color:#fff;font-size:13px;border-bottom:1px solid rgba(255,255,255,.1)}
+.menubar-left{display:flex;align-items:center;gap:18px}
+.menubar-left .apple{font-size:16px;margin-right:4px}
+.menubar-left span{cursor:default;padding:2px 6px;border-radius:4px}
+.menubar-left span:hover{background:rgba(255,255,255,.15)}
+.menubar-right{display:flex;align-items:center;gap:14px;margin-left:auto;font-size:12px}
+.menubar-right .icon{font-size:14px}
+/* ── Desktop Icons ── */
+.desktop-icons{position:absolute;top:40px;left:20px;z-index:15;display:flex;flex-direction:column;gap:8px}
+.desktop-icon{display:flex;flex-direction:column;align-items:center;width:80px;padding:8px;border-radius:8px;cursor:pointer;transition:background .15s}
+.desktop-icon:hover{background:rgba(255,255,255,.1)}
+.desktop-icon:active{transform:scale(.95)}
+.desktop-icon img{width:52px;height:52px;pointer-events:none;border-radius:6px}
+.desktop-icon span{color:#fff;font-size:11px;margin-top:4px;text-align:center;text-shadow:0 1px 4px rgba(0,0,0,.7)}
+/* ── Dock ── */
+.dock{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);z-index:200;display:flex;align-items:flex-end;gap:4px;padding:6px 12px;background:rgba(255,255,255,.15);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);border-radius:16px;border:1px solid rgba(255,255,255,.1)}
+.dock-item{position:relative;display:flex;flex-direction:column;align-items:center;padding:4px 6px;border-radius:8px;cursor:pointer;transition:all .15s}
+.dock-item:hover{transform:translateY(-6px) scale(1.15)}
+.dock-item:active{transform:scale(.95)}
+.dock-item img{width:44px;height:44px;border-radius:5px;pointer-events:none;transition:all .15s}
+.dock-item:hover img{width:52px;height:52px}
+.dock-indicator{position:absolute;bottom:-2px;width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.6);opacity:0;transition:opacity .2s}
+.dock-indicator.active{opacity:1}
+.dock-sep{width:1px;height:36px;background:rgba(255,255,255,.2);margin:0 4px}
+/* ── Windows ── */
+.window{position:absolute;z-index:100;background:rgba(40,40,40,.88);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);border-radius:12px;border:1px solid rgba(255,255,255,.08);box-shadow:0 20px 60px rgba(0,0,0,.5);display:none;min-width:300px;min-height:200px;overflow:hidden}
+.window.active{display:flex;flex-direction:column}
+.window:focus{z-index:150}
+.window-header{display:flex;align-items:center;padding:8px 12px;cursor:default;flex-shrink:0;background:rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.06)}
+.window-dots{display:flex;gap:8px;margin-right:12px}
+.window-dot{width:13px;height:13px;border-radius:50%;cursor:pointer;transition:all .15s}
+.window-dot.close{background:#ff5f57}
+.window-dot.mini{background:#febc2e}
+.window-dot.zoom{background:#28c840}
+.window-dot:hover{filter:brightness(1.2)}
+.window-title{font-size:13px;color:rgba(255,255,255,.7);flex:1;text-align:center}
+.window-body{flex:1;overflow:auto;padding:0}
+.window-body::-webkit-scrollbar{width:6px}
+.window-body::-webkit-scrollbar-track{background:transparent}
+.window-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2);border-radius:3px}
+/* ── Finder ── */
+.finder-body{display:flex;height:100%;color:rgba(255,255,255,.85);font-size:13px}
+.finder-sidebar{width:180px;background:rgba(255,255,255,.04);padding:8px 0;border-right:1px solid rgba(255,255,255,.06)}
+.finder-section{font-size:11px;text-transform:uppercase;color:rgba(255,255,255,.4);padding:4px 14px 4px;letter-spacing:.5px}
+.finder-item{display:flex;align-items:center;gap:8px;padding:5px 14px;cursor:pointer;border-radius:0;transition:background .1s}
+.finder-item:hover,.finder-item.active{background:rgba(255,255,255,.1)}
+.finder-item .fi{font-size:16px;width:20px;text-align:center}
+.finder-content{flex:1;padding:0}
+.finder-path{display:flex;align-items:center;gap:6px;padding:6px 14px;font-size:12px;color:rgba(255,255,255,.5);border-bottom:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.02)}
+.finder-path .arrow{color:rgba(255,255,255,.3)}
+.finder-grid{padding:8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:4px}
+.finder-grid-item{display:flex;flex-direction:column;align-items:center;padding:8px 4px;border-radius:6px;cursor:pointer;transition:background .1s}
+.finder-grid-item:hover{background:rgba(255,255,255,.08)}
+.finder-grid-item.selected{background:rgba(0,120,255,.3)}
+.finder-grid-item img{width:36px;height:36px;border-radius:4px;pointer-events:none}
+.finder-grid-item .name{font-size:11px;margin-top:3px;text-align:center;word-break:break-all;line-height:1.2}
+.finder-grid-item .folder{font-size:32px}
+/* ── Calculator ── */
+.calc-body{padding:12px;color:#fff}
+.calc-display{background:rgba(0,0,0,.3);border-radius:8px;padding:16px 12px;text-align:right;font-size:36px;font-weight:200;margin-bottom:10px;min-height:60px;overflow:hidden}
+.calc-buttons{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.calc-btn{padding:14px;text-align:center;border-radius:8px;background:rgba(255,255,255,.08);cursor:pointer;font-size:18px;transition:background .1s}
+.calc-btn:hover{background:rgba(255,255,255,.15)}
+.calc-btn:active{transform:scale(.95)}
+.calc-btn.op{background:rgba(255,159,10,.5)}
+.calc-btn.op:hover{background:rgba(255,159,10,.7)}
+.calc-btn.eq{background:rgba(255,159,10,.8)}
+.calc-btn.eq:hover{background:rgba(255,159,10,1)}
+.calc-btn.fn{background:rgba(255,255,255,.04);color:rgba(255,255,255,.6)}
+/* ── Terminal ── */
+.terminal-body{background:#1e1e1e;color:#33ff33;font-family:'Menlo','Courier New',monospace;font-size:14px;padding:16px;height:100%;overflow-y:auto;line-height:1.5}
+.terminal-body .prompt{color:#33ff33}
+.terminal-body .cmd{color:#fff}
+.terminal-body input{background:transparent;border:none;color:#fff;font-family:inherit;font-size:14px;outline:none;width:calc(100% - 20px)}
+.terminal-body .line{margin-bottom:2px}
+.terminal-body .output{color:rgba(255,255,255,.7)}
+/* ── About ── */
+.about-body{padding:30px;text-align:center;color:#fff}
+.about-body .alogo{font-size:60px;margin-bottom:10px}
+.about-body h2{font-size:20px;font-weight:600;margin-bottom:4px}
+.about-body .ver{color:rgba(255,255,255,.5);font-size:13px;margin-bottom:20px}
+.about-body .spec{text-align:left;font-size:13px;color:rgba(255,255,255,.7);line-height:1.8}
+.about-body .spec span{color:rgba(255,255,255,.4)}
+/* ── Responsive ── */
+@media(max-width:768px){
+  .lock-time{font-size:48px}
+  .dock{padding:4px 8px;gap:2px}
+  .dock-item img{width:36px;height:36px}
+  .dock-item:hover img{width:42px;height:42px}
+  .window{max-width:95vw}
+  .finder-sidebar{width:120px}
+}
+/* ── Taskbar context ── */
+.toast-msg{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.8);backdrop-filter:blur(10px);color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;z-index:999;opacity:0;transition:opacity .3s}
+.toast-msg.show{opacity:1}
+</style>
+</head>
+<body>
+
+<div id="bootScreen" class="screen active">
+  <div class="boot-logo">🍎</div>
+  <div class="boot-bar-wrap"><div class="boot-bar" id="bootBar"></div></div>
+</div>
+
+<div id="lockScreen" class="screen">
+  <div class="lock-overlay"></div>
+  <div class="lock-content">
+    <div class="lock-time" id="lockTime">--:--</div>
+    <div class="lock-date" id="lockDate">---</div>
+    <div class="lock-avatar">👤</div>
+    <div class="lock-name">小奈</div>
+    <input class="lock-input" id="lockInput" type="password" placeholder="输入密码" maxlength="10" autocomplete="off">
+    <div><button class="lock-btn" id="lockBtn">⏎ 解锁</button></div>
+    <div class="lock-error" id="lockError">密码错误，请重试</div>
+    <div class="lock-hint">点击任意处开始 → 密码: 1234</div>
+  </div>
+</div>
+
+<div id="desktopScreen" class="screen">
+  <div class="desktop-wallpaper"><div class="wallpaper-overlay"></div></div>
+
+  <!-- Menu Bar -->
+  <div class="menubar">
+    <div class="menubar-left">
+      <span class="apple">🍎</span>
+      <span>Finder</span>
+      <span>File</span>
+      <span>Edit</span>
+      <span>View</span>
+      <span>Go</span>
+      <span>Window</span>
+      <span>Help</span>
+    </div>
+    <div class="menubar-right">
+      <span class="icon">🔋</span>
+      <span class="icon">📶</span>
+      <span>🔊</span>
+      <span id="menuTime">--:--</span>
+    </div>
+  </div>
+
+  <!-- Desktop Icons -->
+  <div class="desktop-icons">
+    <div class="desktop-icon" onclick="openFinder()"><img src="icons/Finder.png" alt=""><span>Macintosh HD</span></div>
+    <div class="desktop-icon" onclick="openFinder()"><img src="icons/文件夹.png" alt=""><span>Applications</span></div>
+    <div class="desktop-icon" onclick="openFinder()"><img src="icons/文件夹.png" alt=""><span>Downloads</span></div>
+    <div class="desktop-icon" onclick="openFinder()"><img src="icons/文件夹.png" alt=""><span>Documents</span></div>
+    <div class="desktop-icon" onclick="openFinder()"><img src="icons/设置.png" alt=""><span>Settings</span></div>
+  </div>
+
+  <!-- Dock -->
+  <div class="dock" id="dock">
+    <div class="dock-item" onclick="openFinder()"><img src="icons/Finder.png" alt="Finder"><div class="dock-indicator active"></div></div>
+    <div class="dock-item" onclick="toast('Launchpad')"><img src="icons/App Store.png" alt="Launchpad"><div class="dock-indicator"></div></div>
+    <div class="dock-item" onclick="toast('Safari')"><img src="icons/Safari.png" alt="Safari"><div class="dock-indicator"></div></div>
+    <div class="dock-item" onclick="toast('Messages')"><img src="icons/信息.png" alt="Messages"><div class="dock-indicator"></div></div>
+    <div class="dock-item" onclick="toast('Mail')"><img src="icons/邮件.png" alt="Mail"><div class="dock-indicator"></div></div>
+    <div class="dock-item" onclick="toast('Maps')"><img src="icons/地图.png" alt="Maps"><div class="dock-indicator"></div></div>
+    <div class="dock-item" onclick="toast('Photos')"><img src="icons/照片.png" alt="Photos"><div class="dock-indicator"></div></div>
+    <div class="dock-item" onclick="toast('Music')"><img src="icons/音乐.png" alt="Music"><div class="dock-indicator"></div></div>
+    <div class="dock-sep"></div>
+    <div class="dock-item" onclick="openCalc()"><img src="icons/计算器.png" alt="Calculator"><div class="dock-indicator"></div></div>
+    <div class="dock-item" onclick="openTerminal()"><img src="icons/Siri.png" alt="Terminal"><div class="dock-indicator"></div></div>
+    <div class="dock-item" onclick="openAbout()"><img src="icons/设置.png" alt="Settings"><div class="dock-indicator"></div></div>
+    <div class="dock-sep"></div>
+    <div class="dock-item" onclick="toast('Trash')">🗑️<div class="dock-indicator"></div></div>
+  </div>
+
+  <!-- Finder Window -->
+  <div class="window" id="finderWin" style="width:700px;height:450px;top:60px;left:80px">
+    <div class="window-header">
+      <div class="window-dots">
+        <div class="window-dot close" onclick="closeWin('finderWin')"></div>
+        <div class="window-dot mini" onclick="closeWin('finderWin')"></div>
+        <div class="window-dot zoom" onclick="maximizeWin('finderWin')"></div>
+      </div>
+      <div class="window-title">Finder</div>
+    </div>
+    <div class="window-body finder-body">
+      <div class="finder-sidebar">
+        <div class="finder-section">Favorites</div>
+        <div class="finder-item active"><span class="fi">⏏</span> AirDrop</div>
+        <div class="finder-item"><span class="fi">🕐</span> Recents</div>
+        <div class="finder-item" onclick="navigateFolder('Applications')"><span class="fi">📁</span> Applications</div>
+        <div class="finder-item" onclick="navigateFolder('Desktop')"><span class="fi">🖥️</span> Desktop</div>
+        <div class="finder-item" onclick="navigateFolder('Documents')"><span class="fi">📄</span> Documents</div>
+        <div class="finder-item" onclick="navigateFolder('Downloads')"><span class="fi">⬇️</span> Downloads</div>
+        <div class="finder-section">Tags</div>
+        <div class="finder-item"><span class="fi" style="color:#ff5f57">●</span> Red</div>
+        <div class="finder-item"><span class="fi" style="color:#febc2e">●</span> Orange</div>
+        <div class="finder-item"><span class="fi" style="color:#28c840">●</span> Green</div>
+        <div class="finder-item"><span class="fi" style="color:#5a9fff">●</span> Blue</div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column">
+        <div class="finder-path"><span>Macintosh HD</span><span class="arrow">›</span><span id="finderCurrentPath">Home</span></div>
+        <div class="finder-grid" id="finderGrid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Calculator Window -->
+  <div class="window" id="calcWin" style="width:240px;top:120px;left:500px">
+    <div class="window-header">
+      <div class="window-dots">
+        <div class="window-dot close" onclick="closeWin('calcWin')"></div>
+        <div class="window-dot mini" onclick="closeWin('calcWin')"></div>
+        <div class="window-dot zoom" onclick="maximizeWin('calcWin')"></div>
+      </div>
+      <div class="window-title">计算器</div>
+    </div>
+    <div class="window-body calc-body">
+      <div class="calc-display" id="calcDisplay">0</div>
+      <div class="calc-buttons">
+        <div class="calc-btn fn" onclick="calcInput('C')">C</div>
+        <div class="calc-btn fn" onclick="calcInput('±')">±</div>
+        <div class="calc-btn fn" onclick="calcInput('%')">%</div>
+        <div class="calc-btn op" onclick="calcInput('÷')">÷</div>
+        <div class="calc-btn" onclick="calcInput('7')">7</div>
+        <div class="calc-btn" onclick="calcInput('8')">8</div>
+        <div class="calc-btn" onclick="calcInput('9')">9</div>
+        <div class="calc-btn op" onclick="calcInput('×')">×</div>
+        <div class="calc-btn" onclick="calcInput('4')">4</div>
+        <div class="calc-btn" onclick="calcInput('5')">5</div>
+        <div class="calc-btn" onclick="calcInput('6')">6</div>
+        <div class="calc-btn op" onclick="calcInput('-')">−</div>
+        <div class="calc-btn" onclick="calcInput('1')">1</div>
+        <div class="calc-btn" onclick="calcInput('2')">2</div>
+        <div class="calc-btn" onclick="calcInput('3')">3</div>
+        <div class="calc-btn op" onclick="calcInput('+')">+</div>
+        <div class="calc-btn fn" style="grid-column:span 2" onclick="calcInput('0')">0</div>
+        <div class="calc-btn" onclick="calcInput('.')">.</div>
+        <div class="calc-btn eq" onclick="calcInput('=')">=</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Terminal Window -->
+  <div class="window" id="termWin" style="width:550px;height:350px;top:100px;left:300px">
+    <div class="window-header">
+      <div class="window-dots">
+        <div class="window-dot close" onclick="closeWin('termWin')"></div>
+        <div class="window-dot mini" onclick="closeWin('termWin')"></div>
+        <div class="window-dot zoom" onclick="maximizeWin('termWin')"></div>
+      </div>
+      <div class="window-title">终端</div>
+    </div>
+    <div class="window-body terminal-body" id="termBody">
+      <div class="line output">macOS Sequoia 15.0 达尔文内核</div>
+      <div class="line output">最后登录: <span id="termLoginTime"></span></div>
+      <div class="line" style="margin-top:8px"><span class="prompt">xiaonai@MacBook-Pro ~ % </span></div>
+      <div style="display:flex"><span class="prompt" id="termPrompt">xiaonai@MacBook-Pro ~ % </span><input id="termInput" type="text" autofocus onkeydown="termKey(event)"></div>
+    </div>
+  </div>
+
+  <!-- About Window -->
+  <div class="window" id="aboutWin" style="width:400px;top:160px;left:350px">
+    <div class="window-header">
+      <div class="window-dots">
+        <div class="window-dot close" onclick="closeWin('aboutWin')"></div>
+        <div class="window-dot mini" onclick="closeWin('aboutWin')"></div>
+        <div class="window-dot zoom" onclick="maximizeWin('aboutWin')"></div>
+      </div>
+      <div class="window-title">关于本机</div>
+    </div>
+    <div class="window-body about-body">
+      <div class="alogo">🍎</div>
+      <h2>macOS Sequoia</h2>
+      <div class="ver">版本 15.0</div>
+      <div class="spec">
+        <div><span>芯片：</span>Apple M4 Pro</div>
+        <div><span>内存：</span>24 GB</div>
+        <div><span>存储：</span>512GB SSD</div>
+        <div><span>序列号：</span>F2G9Z3K8L7M1</div>
+        <div><span>macOS版本：</span>Sequoia 15.0 (Build 24A999)</div>
+        <div><span>内核：</span>Darwin 24.0.0</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-msg" id="toastMsg"></div>
+</div>
+
+<script>
+// ── Boot Sequence ──
+setTimeout(()=>{
+  document.getElementById('bootScreen').classList.remove('active');
+  document.getElementById('lockScreen').classList.add('active');
+  updateLockTime();
+  setInterval(updateLockTime,1000);
+  setInterval(updateMenuTime,1000);
+},3500);
+
+function updateLockTime(){
+  const n=new Date();
+  document.getElementById('lockTime').textContent=n.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('lockDate').textContent=n.toLocaleDateString('zh-CN',{weekday:'long',month:'long',day:'numeric'});
+}
+function updateMenuTime(){
+  const n=new Date();
+  document.getElementById('menuTime').textContent=n.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})+n.toLocaleDateString('zh-CN',{month:'numeric',day:'numeric'});
+}
+
+// ── Lock Screen ──
+const lockInput=document.getElementById('lockInput');
+const lockBtn=document.getElementById('lockBtn');
+const lockError=document.getElementById('lockError');
+
+function tryUnlock(){
+  if(lockInput.value==='1234'){
+    document.getElementById('lockScreen').classList.remove('active');
+    document.getElementById('desktopScreen').classList.add('active');
+    updateMenuTime();
+    renderFinder();
+  }else{
+    lockError.classList.add('show');
+    setTimeout(()=>lockError.classList.remove('show'),2000);
+  }
+}
+lockBtn.onclick=tryUnlock;
+lockInput.onkeydown=e=>{if(e.key==='Enter')tryUnlock()};
+
+// ── Finder & File System ──
+const fileSystem={
+  'Home':[
+    {name:'报告.pdf',icon:'icons/App Store.png',type:'file',size:'1.2 MB'},
+    {name:'照片合集',icon:'icons/照片.png',type:'file',size:'24 MB'},
+    {name:'readme.txt',icon:'icons/App Store.png',type:'file',size:'3 KB'},
+    {name:'项目文件夹',icon:'icons/文件夹.png',type:'folder',children:[
+      {name:'index.html',icon:'icons/Safari.png',type:'file',size:'5 KB'},
+      {name:'style.css',icon:'icons/App Store.png',type:'file',size:'2 KB'},
+      {name:'script.js',icon:'icons/App Store.png',type:'file',size:'8 KB'},
+      {name:'assets',icon:'icons/文件夹.png',type:'folder',children:[
+        {name:'logo.png',icon:'icons/照片.png',type:'file',size:'45 KB'},
+        {name:'icon.svg',icon:'icons/App Store.png',type:'file',size:'2 KB'}
+      ]}
+    ]},
+    {name:'照片合集',icon:'icons/照片.png',type:'file',size:'156 MB'},
+    {name:'工作报告.docx',icon:'icons/App Store.png',type:'file',size:'256 KB'},
+    {name:'Downloads',icon:'icons/文件夹.png',type:'folder',children:[]},
+    {name:'Applications',icon:'icons/文件夹.png',type:'folder',children:[]},
+    {name:'Desktop',icon:'icons/文件夹.png',type:'folder',children:[]},
+    {name:'Documents',icon:'icons/文件夹.png',type:'folder',children:[]}
+  ]
+};
+let currentPath='Home';
+let folderStack=['Home'];
+
+function renderFinder(){
+  const grid=document.getElementById('finderGrid');
+  const items=fileSystem[currentPath]||[];
+  grid.innerHTML='';
+  document.getElementById('finderCurrentPath').textContent=currentPath;
+  items.forEach(item=>{
+    const div=document.createElement('div');
+    div.className='finder-grid-item';
+    if(item.type==='folder'){
+      div.ondblclick=()=>navigateFolder(item.name);
+      div.innerHTML=`<div class="folder">📁</div><div class="name">${item.name}</div>`;
+    }else{
+      div.innerHTML=`<img src="${item.icon}" alt="" onerror="this.outerHTML='<div style=\\\"font-size:28px;text-align:center\\\">📄</div>'"><div class="name">${item.name}</div>`;
+    }
+    div.onclick=()=>{
+      document.querySelectorAll('.finder-grid-item').forEach(el=>el.classList.remove('selected'));
+      div.classList.add('selected');
+    };
+    grid.appendChild(div);
+  });
+}
+
+function navigateFolder(name){
+  if(name==='Applications'||name==='Desktop'||name==='Downloads'||name==='Documents'){
+    folderStack.push(currentPath);
+    currentPath=name;
+    if(!fileSystem[name]){
+      fileSystem[name]=[
+        {name:'README.md',icon:'icons/App Store.png',type:'file',size:'1 KB'},
+        {name:'.DS_Store',icon:'icons/App Store.png',type:'file',size:'8 KB'}
+      ];
+    }
+    renderFinder();
+    return;
+  }
+  // Navigate into children
+  const items=fileSystem[folderStack[folderStack.length-1]]||fileSystem['Home'];
+  for(const item of items){
+    if(item.name===name&&item.type==='folder'&&item.children){
+      folderStack.push(currentPath);
+      const folderName='_'+Date.now();
+      fileSystem[folderName]=item.children;
+      currentPath=folderName;
+      renderFinder();
+      document.getElementById('finderCurrentPath').textContent=name;
+      return;
+    }
+  }
+  toast(`打开: ${name}`);
+}
+
+function openFinder(){
+  const win=document.getElementById('finderWin');
+  const dock=document.getElementById('dock');
+  win.classList.add('active');
+  win.style.display='flex';
+  bringToFront(win);
+  dock.querySelector('.dock-item:first-child .dock-indicator').classList.add('active');
+}
+
+// ── Calculator ──
+let calcStr='',calcDisplay=document.getElementById('calcDisplay');
+function calcInput(val){
+  if(val==='C'){calcStr='';calcDisplay.textContent='0';return}
+  if(val==='='){
+    try{
+      let expr=calcStr.replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-');
+      const result=Function('"use strict";return ('+expr+')')();
+      calcDisplay.textContent=String(result).slice(0,12);
+      calcStr=String(result);
+    }catch(e){calcDisplay.textContent='错误';calcStr=''}
+    return;
+  }
+  if(val==='±'){
+    if(calcStr.startsWith('-'))calcStr=calcStr.slice(1);
+    else calcStr='-'+calcStr;
+    calcDisplay.textContent=calcStr||'0';
+    return;
+  }
+  if(val==='%'){
+    try{
+      let expr=calcStr.replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-');
+      const result=Function('"use strict";return ('+expr+')')()/100;
+      calcDisplay.textContent=String(result).slice(0,12);
+      calcStr=String(result);
+    }catch(e){}
+    return;
+  }
+  if(calcStr==='0'&&val!=='.')calcStr='';
+  calcStr+=val;
+  calcDisplay.textContent=calcStr;
+}
+
+function openCalc(){
+  const win=document.getElementById('calcWin');
+  win.classList.add('active');
+  win.style.display='flex';
+  bringToFront(win);
+}
+
+// ── Terminal ──
+const commands={
+  ls:'Applications  Desktop  Documents  Downloads  Library  Movies  Music  Pictures',
+  pwd:'/Users/xiaonai',
+  date:new Date().toString(),
+  whoami:'xiaonai',
+  echo:args=>args.join(' '),
+  help:'可用命令: ls, pwd, echo, date, whoami, clear, help',
+  clear:()=>'__CLEAR__'
+};
+
+function termKey(e){
+  if(e.key!=='Enter')return;
+  const input=document.getElementById('termInput');
+  const body=document.getElementById('termBody');
+  const cmd=input.value.trim();
+  const prompt=document.getElementById('termPrompt').textContent;
+  
+  const cmdLine=document.createElement('div');
+  cmdLine.className='line';
+  cmdLine.innerHTML=`<span class="prompt">${prompt}</span><span class="cmd">${cmd}</span>`;
+  body.insertBefore(cmdLine,body.lastElementChild);
+  
+  input.value='';
+  if(!cmd)return;
+
+  const parts=cmd.split(' ');
+  const base=parts[0].toLowerCase();
+  const args=parts.slice(1);
+  let output='';
+  
+  if(commands[base]){
+    output=typeof commands[base]==='function'?commands[base](args):commands[base];
+  }else{
+    output=`zsh: command not found: ${base}`;
+  }
+  
+  if(output==='__CLEAR__'){
+    body.innerHTML='';
+    const line=document.createElement('div');
+    line.style.display='flex';
+    line.innerHTML=`<span class="prompt">${prompt}</span><input id="termInput" type="text" autofocus onkeydown="termKey(event)" style="flex:1">`;
+    body.appendChild(line);
+    setTimeout(()=>document.getElementById('termInput')?.focus(),50);
+    return;
+  }
+  
+  const outLine=document.createElement('div');
+  outLine.className='line output';
+  outLine.textContent=output;
+  body.insertBefore(outLine,body.lastElementChild);
+  body.scrollTop=body.scrollHeight;
+  
+  setTimeout(()=>document.getElementById('termInput')?.focus(),50);
+}
+
+function openTerminal(){
+  const win=document.getElementById('termWin');
+  win.classList.add('active');
+  win.style.display='flex';
+  bringToFront(win);
+  document.getElementById('termLoginTime').textContent=new Date().toLocaleString();
+  setTimeout(()=>document.getElementById('termInput')?.focus(),100);
+}
+
+// ── About ──
+function openAbout(){
+  const win=document.getElementById('aboutWin');
+  win.classList.add('active');
+  win.style.display='flex';
+  bringToFront(win);
+}
+
+// ── Window Management (Drag + Z-order) ──
+let winZIndex=100;
+
+function bringToFront(win){
+  winZIndex++;
+  win.style.zIndex=winZIndex;
+}
+
+function closeWin(id){
+  const win=document.getElementById(id);
+  win.classList.remove('active');
+  win.style.display='none';
+}
+
+function maximizeWin(id){
+  const win=document.getElementById(id);
+  if(win.style.width==='100%'){
+    win.style.width=win.dataset.origWidth||'600px';
+    win.style.height=win.dataset.origHeight||'400px';
+    win.style.top='60px';
+    win.style.left='100px';
+  }else{
+    win.dataset.origWidth=win.style.width;
+    win.dataset.origHeight=win.style.height;
+    win.style.width='calc(100% - 40px)';
+    win.style.height='calc(100vh - 80px)';
+    win.style.top='40px';
+    win.style.left='20px';
+  }
+}
+
+// Make windows draggable
+document.querySelectorAll('.window').forEach(win=>{
+  const header=win.querySelector('.window-header');
+  let isDown=false,ox,oy;
+  header.addEventListener('mousedown',e=>{
+    if(e.target.closest('.window-dots'))return;
+    isDown=true;
+    ox=e.clientX-win.offsetLeft;
+    oy=e.clientY-win.offsetTop;
+    bringToFront(win);
+  });
+  document.addEventListener('mousemove',e=>{
+    if(!isDown)return;
+    win.style.left=(e.clientX-ox)+'px';
+    win.style.top=(e.clientY-oy)+'px';
+  });
+  document.addEventListener('mouseup',()=>isDown=false);
+  win.addEventListener('mousedown',()=>bringToFront(win));
+});
+
+// ── Toast ──
+function toast(msg){
+  const t=document.getElementById('toastMsg');
+  t.textContent=msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),1500);
+}
+</script>
+</body>
+</html>
